@@ -1,11 +1,9 @@
 package Dist::Zilla::PluginBundle::Author::RRWO;
 
-use v5.10;
-
-use strict;
+use v5.20;
 use warnings;
 
-our $VERSION = 'v0.1.0';
+our $VERSION = 'v0.2.0';
 
 use Moose;
 with
@@ -34,7 +32,7 @@ has authority => (
         return $self->payload->{'Authority.authority'}
           if exists $self->payload->{'Authority.authority'};
 
-        $self->payload->{authority} // 'cpan:RRWO';
+        $self->payload->{authority} // 'cpan:RRWO';    # FIXME
     },
 );
 
@@ -43,8 +41,7 @@ has fake_release => (
     isa      => Bool,
     init_arg => undef,
     lazy     => 1,
-    default =>
-      sub { $ENV{FAKE_RELEASE} || $_[0]->payload->{fake_release} // 0 },
+    default  => sub { $ENV{FAKE_RELEASE} || $_[0]->payload->{fake_release} // 0 },
 );
 
 has plugin_prereq_phase => (
@@ -55,11 +52,10 @@ has plugin_prereq_phase => (
 );
 
 has plugin_prereq_relationship => (
-    is   => 'ro',
-    isa  => Str,
-    lazy => 1,
-    default =>
-      sub { $_[0]->payload->{plugin_prereq_relationship} // 'requires' },
+    is      => 'ro',
+    isa     => Str,
+    lazy    => 1,
+    default => sub { $_[0]->payload->{plugin_prereq_relationship} // 'requires' },
 );
 
 has cpanfile => (
@@ -67,13 +63,6 @@ has cpanfile => (
     isa     => Str,
     lazy    => 1,
     default => 'cpanfile',
-);
-
-has skipfile => (
-    is      => 'ro',
-    isa     => Str,
-    lazy    => 1,
-    default => 'MANIFEST.SKIP',
 );
 
 has readme => (
@@ -97,16 +86,17 @@ sub configure {
         ],
 
         [
-         'Keywords'
+            'Keywords'    # TODO keywords
         ],
 
         [
             'GatherDir' => {
-                exclude_filename =>
-                  [ $self->readme, $self->cpanfile, $self->skipfile ],
+                exclude_filename => [ $self->readme, $self->cpanfile ],    # FIXME
             },
         ],
+
         ['PruneCruft'],
+
         ['CPANFile'],
         [
             'License' => {
@@ -114,39 +104,23 @@ sub configure {
                 filename   => 'LICENSE',
             }
         ],
-        ['ExtraTests'],
         ['ExecDir'],
         ['ShareDir'],
         ['MakeMaker'],
         ['Manifest'],
         ['TestRelease'],
+        ['CheckExtraTests'],
         ['ConfirmRelease'],
+        ['Signature'],
         ['UploadToCPAN'],
         ['RecommendedPrereqs'],
         ['AutoPrereqs'],
-        [
-            'RemovePrereqs' => {
-                remove => [qw/ strict warnings /],
-            },
-        ],
-        [
-            'EnsurePrereqsInstalled' => {
-                ':version' => '0.003',
-                'type'     => [qw/ requires recommends /],
-            }
-        ],
-
-        ['GitHub::Meta'],
-        [
-            'Git::Contributors' => {
-                ':version' => '0.029',
-                order_by => 'name'
-            }
-        ],
 
         ['PodWeaver'],
+
         [
-            'ReadmeAnyFromPod' => {
+            'UsefulReadme' => {
+                phase    => 'build',
                 type     => 'gfm',
                 filename => $self->readme,
                 location => 'build',
@@ -154,15 +128,8 @@ sub configure {
         ],
 
         [
-            'Generate::ManifestSkip' => {
-                ':version' => 'v0.1.3',
-                skipfile   => $self->skipfile,
-            }
-        ],
-
-        [
             'CopyFilesFromBuild' => {
-                copy => [ $self->readme, $self->cpanfile, $self->skipfile ],
+                copy => [ $self->readme, $self->cpanfile, $self->skipfile ],    # FIXME
 
             }
         ],
@@ -170,21 +137,26 @@ sub configure {
         [
             'Metadata' => {
                 x_authority => $self->authority,
-            }
+
+                # FIXME
+            },
         ],
         ['MetaProvides::Package'],
         ['MetaJSON'],
         ['MetaYAML'],
+
+        ['CheckMetaResources'],
+        ['MetaTests'],
         [
-            'InstallGuide' => {
-                ':version' => '1.200005',
+            'MetaNoIndex' => {
+                directory => [ qw(t xt), qw(inc local perl5 fatlib examples share devel) ],
             }
         ],
-
-        ['MetaTests'],
         ['PodSyntaxTests'],
+        ['Test::Pod::Coverage::Configurable'],
+        ['Test::Pod::LinkCheck'],
         ['Test::ChangesHasContent'],
-        ['Test::CheckManifest'],
+        ['Test::DistManifest'],
         ['Test::EOF'],
         [
             'Test::EOL' => {
@@ -211,8 +183,23 @@ sub configure {
                 ':version' => '2.000008',
             }
         ],
-        ['Test::Pod::Coverage::Configurable'],
+        [
+            'Test::PodSpelling' => {
+                ':version' => '2.006003'
+            }
+        ],
+        [
+            'PodCoverageTests'
+
+            # Test::Pod::Coverage::Configurable uses Perl v5.13.1 syntax
+        ],
         ['Test::Fixme'],
+        [
+            'Test::Kwalitee' => {
+                ':version' => '2.10',
+                filename   => 'xt/author/kwalitee.t'
+            }
+        ],
         [
             'Test::ReportPrereqs' => {
                 ':version'        => '0.022',
@@ -220,6 +207,19 @@ sub configure {
                 verify_prereqs    => 1,
             }
         ],
+
+        [
+            'Test::Perl::Critic',
+            {
+                # FIXME configurable but  only set if file exists
+                critic_config => 'xt/etc/perlcritic.rc'
+            }
+        ],
+        ['MojibakeTests'],
+        ['Test::MixedScripts'],
+        ['Test::CPAN::Changes'],
+        ['Test::UnusedVars'],
+
         ['RewriteVersion'],
         ['NextRelease'],
         ['BumpVersionAfterRelease'],
@@ -232,14 +232,22 @@ sub configure {
         ],
     );
 
-    $self->add_bundle(
+    ['GitHub::Meta'],
+      [
+        'Git::Contributors' => {
+            ':version' => '0.029',
+            order_by   => 'name'
+        }
+      ],
+
+      $self->add_bundle(
         'Git' => {
             allow_dirty => [qw/ dist.ini /],
-            push_to     => 'origin master:master',
+            push_to     => 'origin master:master',    # configurable main:main
             tag_format  => '%v',
             commit_msg  => '%v%n%n%c',
         }
-    );
+      );
 
 }
 
